@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - develop
+      - testing
     paths:
       - '**.php'
       - 'composer.*'
@@ -51,3 +52,54 @@ jobs:
       mysql-version: ${{ matrix.mysql-version }}
       dependencies: ${{ matrix.dependencies }}
       coveralls-php: '8.2'
+
+  sqlsrv-2025:
+    name: PHP 8.4 - SQLSRV 2025
+    runs-on: ubuntu-22.04
+
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2025-latest
+        env:
+          MSSQL_SA_PASSWORD: 1Secure*Password1
+          ACCEPT_EULA: Y
+          MSSQL_PID: Developer
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd="/opt/mssql-tools18/bin/sqlcmd -C -S 127.0.0.1 -U sa -P 1Secure*Password1 -Q 'SELECT @@VERSION'"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Create database
+        run: sqlcmd -S 127.0.0.1 -U sa -P 1Secure*Password1 -C -Q "CREATE DATABASE test"
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer
+          extensions: intl, mbstring, sqlsrv, xml
+          coverage: xdebug
+
+      - name: Install dependencies
+        run: composer install --no-progress --no-interaction --prefer-dist
+
+      - name: Test with SQL Server 2025
+        run: vendor/bin/phpunit --testsuite main
+        env:
+          DB: SQLSRV
+          database_tests_hostname: 127.0.0.1
+          database_tests_database: test
+          database_tests_username: sa
+          database_tests_password: 1Secure*Password1
+          database_tests_DBDriver: SQLSRV
+          database_tests_DBPrefix: tests_
+          database_tests_port: '1433'
+          database_tests_encrypt: 'false'
+          database_tests_strictOn: 'true'
